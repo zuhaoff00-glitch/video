@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="referrer" content="origin"> <!-- YANGI: REFERRER UCHUN -->
+  <meta name="referrer" content="origin">
   <title>Video Ro'yxati</title>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
@@ -48,6 +48,7 @@
       </div>
     </div>
   </div>
+
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js';
     import { getDatabase, ref, onValue, remove, push } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js';
@@ -142,11 +143,12 @@
           item.className = 'video-item';
           item.innerHTML = `
             <div class="video-title">${data.title ? data.title : data.url}</div>
-          <iframe 
-              src="https://www.youtube.com/embed/${data.videoId}?autoplay=0&controls=1&modestbranding=1&rel=0&showinfo=0&fs=1&iv_load_policy=3&playsinline=1" 
+            <iframe 
+              src="https://www.youtube-nocookie.com/embed/${data.videoId}?modestbranding=1&rel=0&controls=1&fs=1&iv_load_policy=3&playsinline=1&disablekb=1&cc_load_policy=0&origin=${encodeURIComponent(window.location.origin)}" 
               frameborder="0" 
               allow="fullscreen" 
-              allowfullscreen>
+              allowfullscreen
+              sandbox="allow-scripts allow-same-origin allow-presentation allow-popups">
             </iframe>
             ${isAdmin ? `<button class="delete" onclick="deleteVideo('${key}')">O'chirish</button>` : ''}
           `;
