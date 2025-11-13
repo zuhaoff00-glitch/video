@@ -9,8 +9,9 @@
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family: system-ui, sans-serif; background: #000; color: white; padding: 10px; }
     .c { max-width: 100%; margin: auto; }
-    input { width: 100%; padding: 12px; margin: 10px 0; border: none; border-radius: 8px; font-size: 16px; background: #333; color: white; }
-    button { width: 100%; padding: 14px; background: #ff0000; color: white; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; margin: 5px 0; }
+    input, button, select { width: 100%; padding: 12px; margin: 10px 0; border: none; border-radius: 8px; font-size: 16px; }
+    input { background: #333; color: white; }
+    button { background: #ff0000; color: white; font-weight: bold; }
     button:hover { background: #cc0000; }
     button.delete { background: #dc3545; width: auto; padding: 8px 12px; margin-left: 10px; font-size: 14px; }
     button.admin-login { background: #333; font-size: 14px; padding: 8px 16px; margin: 10px 0; }
@@ -21,6 +22,8 @@
     #status { padding: 10px; margin: 10px 0; border-radius: 8px; text-align: center; font-weight: bold; font-size: 14px; }
     .s { background: #0f5132; color: #d1e7dd; }
     .e { background: #842029; color: #f8d7da; }
+    .file-input { display: none; }
+    .file-label { background: #444; cursor: pointer; text-align: center; }
   </style>
 </head>
 <body>
@@ -28,15 +31,25 @@
     <div id="guestView">
       <button class="admin-login" onclick="showLogin()">Admin kirish</button>
     </div>
+
     <div id="adminPanel">
-      <h2>Video Ro'yxati (Admin)</h2>
+      <h2>Video Qo'shish (Admin)</h2>
       <input type="text" id="videoTitle" placeholder="Video nomi...">
-      <input type="text" id="youtubeUrl" placeholder="Yangi YouTube link...">
+      <input type="text" id="youtubeUrl" placeholder="YouTube link (ixtiyoriy)...">
+      
+      <label class="file-label">MP4 fayl tanlash (Instagram uchun)</label>
+      <input type="file" id="videoFile" accept="video/mp4" class="file-input">
+
       <button onclick="addVideo()">Video Qo'shish</button>
       <button onclick="logout()" style="background:#666; font-size:14px;">Chiqish</button>
       <div id="status"></div>
+      <div id="uploadProgress" style="background:#333; height:8px; border-radius:4px; margin:10px 0; overflow:hidden;">
+        <div id="progressBar" style="width:0%; height:100%; background:#ff0000; transition:0.3s;"></div>
+      </div>
     </div>
+
     <div id="videoList"></div>
+
     <div id="loginModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:999; justify-content:center; align-items:center;">
       <div style="background:#222; padding:20px; border-radius:12px; width:90%; max-width:400px; text-align:center;">
         <h3>Admin kodi</h3>
@@ -51,6 +64,8 @@
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js';
     import { getDatabase, ref, onValue, remove, push } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js';
+    import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-storage.js';
+
     const firebaseConfig = {
       apiKey: "AIzaSyB5TTFHpAmsHeOuoe9kM5rgK-EAd12qg0E",
       authDomain: "picnature-e48f0.firebaseapp.com",
@@ -60,9 +75,13 @@
       messagingSenderId: "1076023325797",
       appId: "1:1076023325797:web:9116d3221c68331f8b028c"
     };
+
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
+    const storage = getStorage(app);
     const videosRef = ref(db, 'videos');
+    const currentOrigin = window.location.origin;
+
     let isAdmin = false;
     const savedAdmin = localStorage.getItem('isAdmin');
     if (savedAdmin === 'true') {
@@ -70,14 +89,16 @@
       document.getElementById('adminPanel').style.display = 'block';
       document.getElementById('guestView').style.display = 'none';
     }
-    window.showLogin = function() {
-      document.getElementById('loginModal').style.display = 'flex';
-    };
-    window.hideLogin = function() {
-      document.getElementById('loginModal').style.display = 'none';
-      document.getElementById('loginStatus').textContent = '';
-    };
-    window.checkLogin = function() {
+
+    // Fayl tanlash
+    document.querySelector('.file-label').addEventListener('click', () => {
+      document.getElementById('videoFile').click();
+    });
+
+    window.showLogin = () => { document.getElementById('loginModal').style.display = 'flex'; };
+    window.hideLogin = () => { document.getElementById('loginModal').style.display = 'none'; document.getElementById('loginStatus').textContent = ''; };
+
+    window.checkLogin = () => {
       const code = document.getElementById('adminCode').value.trim();
       if (code === 'Admin123') {
         isAdmin = true;
@@ -91,41 +112,74 @@
         statusShow('Noto\'g\'ri kod!', 'e');
       }
     };
-    window.logout = function() {
-      localStorage.removeItem('isAdmin');
-      location.reload();
-    };
-    window.addVideo = function() {
+
+    window.logout = () => { localStorage.removeItem('isAdmin'); location.reload(); };
+
+    window.addVideo = async () => {
       if (!isAdmin) return;
       const title = document.getElementById('videoTitle').value.trim();
-      const url = document.getElementById('youtubeUrl').value.trim();
-      if (!title || !url) return statusShow('Nom va link kiriting', 'e');
-      const id = getId(url);
-      if (!id) return statusShow('Noto\'g\'ri link', 'e');
-      push(videosRef, { videoId: id, title: title, url: url, time: Date.now() })
-        .then(() => { 
-          statusShow('Video qo\'shildi!', 's'); 
-          document.getElementById('videoTitle').value = '';
-          document.getElementById('youtubeUrl').value = ''; 
-        })
-        .catch(() => statusShow('Xato', 'e'));
+      const youtubeUrl = document.getElementById('youtubeUrl').value.trim();
+      const fileInput = document.getElementById('videoFile');
+      const file = fileInput.files[0];
+
+      if (!title) return statusShow('Nom kiriting', 'e');
+      if (!youtubeUrl && !file) return statusShow('YouTube link yoki MP4 fayl kiriting', 'e');
+
+      let videoData = { title, time: Date.now() };
+
+      if (youtubeUrl) {
+        const id = getId(youtubeUrl);
+        if (!id) return statusShow('Noto\'g\'ri YouTube link', 'e');
+        videoData.videoId = id;
+        videoData.url = youtubeUrl;
+        await saveToDB(videoData);
+      } else if (file) {
+        statusShow('Fayl yuklanmoqda...', 's');
+        const fileRef = storageRef(storage, 'reels/' + Date.now() + '_' + file.name);
+        const uploadTask = uploadBytesResumable(fileRef, file);
+
+        uploadTask.on('state_changed',
+          (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            document.getElementById('progressBar').style.width = progress + '%';
+          },
+          (error) => statusShow('Yuklashda xato', 'e'),
+          async () => {
+            const url = await getDownloadURL(uploadTask.snapshot.ref);
+            videoData.url = url;
+            await saveToDB(videoData);
+            document.getElementById('videoFile').value = '';
+            document.getElementById('progressBar').style.width = '0%';
+          }
+        );
+      }
     };
-    window.deleteVideo = function(key) {
+
+    async function saveToDB(data) {
+      await push(videosRef, data);
+      statusShow('Video qo\'shildi!', 's');
+      document.getElementById('videoTitle').value = '';
+      document.getElementById('youtubeUrl').value = '';
+    }
+
+    window.deleteVideo = (key) => {
       if (!isAdmin) return;
       remove(ref(db, `videos/${key}`))
         .then(() => statusShow('Video o\'chirildi!', 's'))
         .catch(() => statusShow('O\'chirishda xato', 'e'));
     };
+
     function getId(u) {
       const m = u.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})/);
       return m ? m[1] : null;
-    };
+    }
+
     function statusShow(msg, type) {
       const el = document.getElementById('status');
-      el.textContent = msg;
-      el.className = type;
+      el.textContent = msg; el.className = type;
       setTimeout(() => { el.textContent = ''; el.className = ''; }, 3000);
-    };
+    }
+
     function loadVideos() {
       onValue(videosRef, (snap) => {
         const videos = snap.val() || {};
@@ -135,31 +189,46 @@
           listEl.innerHTML = '<p style="text-align:center; color:#aaa;">Hozircha video yo\'q.</p>';
           return;
         }
+
         const sortedKeys = Object.keys(videos).sort((a, b) => videos[b].time - videos[a].time);
         sortedKeys.forEach(key => {
           const data = videos[key];
           const item = document.createElement('div');
           item.className = 'video-item';
-          item.innerHTML = `
-            <div class="video-title">${data.title ? data.title : data.url}</div>
-            <div style="position: relative; width: 100%; height: 200px; border-radius: 8px; overflow: hidden; margin-top: 10px;">
-              <iframe 
-                src="https://www.youtube-nocookie.com/embed/${data.videoId}?modestbranding=1&rel=0&controls=1&fs=1&iv_load_policy=3&playsinline=1&disablekb=1&cc_load_policy=0&showinfo=0&branding=0&origin=${encodeURIComponent(window.location.origin)}&enablejsapi=1" 
-                frameborder="0" 
-                allow="fullscreen" 
-                allowfullscreen
-                sandbox="allow-scripts allow-same-origin allow-presentation"
-                style="pointer-events: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0;"
-                onload="this.contentWindow.postMessage('{\"event\":\"command\",\"func\":\"stopVideo\",\"args\":\"\"}', '*');">
-              </iframe>
-              <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; background: transparent;"></div>
-            </div>
-            ${isAdmin ? `<button class="delete" onclick="deleteVideo('${key}')">O'chirish</button>` : ''}
-          `;
+
+          if (data.url && data.url.includes('.mp4')) {
+            // MP4 Video (Instagram Reel)
+            item.innerHTML = `
+              <div class="video-title">${data.title}</div>
+              <video controls style="width:100%; height:auto; border-radius:8px; margin-top:10px; background:#000;">
+                <source src="${data.url}" type="video/mp4">
+                Video yuklanmadi.
+              </video>
+              ${isAdmin ? `<button class="delete" onclick="deleteVideo('${key}')">O'chirish</button>` : ''}
+            `;
+          } else {
+            // YouTube
+            item.innerHTML = `
+              <div class="video-title">${data.title}</div>
+              <div style="position: relative; width: 100%; height: 200px; border-radius: 8px; overflow: hidden; margin-top: 10px;">
+                <iframe 
+                  src="https://www.youtube-nocookie.com/embed/${data.videoId}?modestbranding=1&rel=0&controls=1&fs=1&iv_load_policy=3&playsinline=1&disablekb=1&cc_load_policy=0&showinfo=0&branding=0&origin=${encodeURIComponent(currentOrigin)}&enablejsapi=1" 
+                  frameborder="0" 
+                  allow="fullscreen" 
+                  allowfullscreen
+                  sandbox="allow-scripts allow-same-origin allow-presentation"
+                  style="pointer-events: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0;">
+                </iframe>
+                <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; background: transparent;"></div>
+              </div>
+              ${isAdmin ? `<button class="delete" onclick="deleteVideo('${key}')">O'chirish</button>` : ''}
+            `;
+          }
           listEl.appendChild(item);
         });
       });
     }
+
     loadVideos();
   </script>
 </body>
