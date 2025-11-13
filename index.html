@@ -17,7 +17,6 @@
     #adminPanel { display: none; }
     #videoList { margin-top: 20px; }
     .video-item { background: #222; margin: 10px 0; padding: 15px; border-radius: 12px; }
-    .video-item iframe { width: 100%; height: 200px; border-radius: 8px; margin-top: 10px; }
     .video-title { font-size: 16px; margin-bottom: 10px; color: #fff; }
     #status { padding: 10px; margin: 10px 0; border-radius: 8px; text-align: center; font-weight: bold; font-size: 14px; }
     .s { background: #0f5132; color: #d1e7dd; }
@@ -143,13 +142,18 @@
           item.className = 'video-item';
           item.innerHTML = `
             <div class="video-title">${data.title ? data.title : data.url}</div>
-            <iframe 
-              src="https://www.youtube-nocookie.com/embed/${data.videoId}?modestbranding=1&rel=0&controls=1&fs=1&iv_load_policy=3&playsinline=1&disablekb=1&cc_load_policy=0&origin=${encodeURIComponent(window.location.origin)}" 
-              frameborder="0" 
-              allow="fullscreen" 
-              allowfullscreen
-              sandbox="allow-scripts allow-same-origin allow-presentation allow-popups">
-            </iframe>
+            <div style="position: relative; width: 100%; height: 200px; border-radius: 8px; overflow: hidden; margin-top: 10px;">
+              <iframe 
+                src="https://www.youtube-nocookie.com/embed/${data.videoId}?modestbranding=1&rel=0&controls=1&fs=1&iv_load_policy=3&playsinline=1&disablekb=1&cc_load_policy=0&showinfo=0&branding=0&origin=${encodeURIComponent(window.location.origin)}&enablejsapi=1" 
+                frameborder="0" 
+                allow="fullscreen" 
+                allowfullscreen
+                sandbox="allow-scripts allow-same-origin allow-presentation"
+                style="pointer-events: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0;"
+                onload="this.contentWindow.postMessage('{\"event\":\"command\",\"func\":\"stopVideo\",\"args\":\"\"}', '*');">
+              </iframe>
+              <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; background: transparent;"></div>
+            </div>
             ${isAdmin ? `<button class="delete" onclick="deleteVideo('${key}')">O'chirish</button>` : ''}
           `;
           listEl.appendChild(item);
